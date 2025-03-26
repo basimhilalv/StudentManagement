@@ -33,11 +33,14 @@ namespace StudentManagement.Services
 
         public async Task<IEnumerable<Student>> GetStudentByAge(int age)
         {
-            DataSet dataSet = await GetStudentFromDatabase($"Age = {age}");
+            DataSet dataSet = await GetStudentFromDatabase();
             List<Student> students = new List<Student>();
             if (dataSet.Tables.Contains("Students"))
             {
-                foreach (DataRow row in dataSet.Tables["Students"].Rows)
+                DataTable studentTable = dataSet.Tables["Students"];
+                DataView studentView = new DataView(studentTable);
+                studentView.RowFilter = $"Age = {age}";
+                foreach (DataRowView row in studentView)
                 {
                     students.Add(new Student
                     {
