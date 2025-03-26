@@ -30,13 +30,6 @@ namespace StudentManagement.Controllers
             }
             return Ok(student);
         }
-        [HttpGet("age/{age}")]
-        public async Task<IActionResult> GetStudentByAge(int age)
-        {
-            var students = await _studentServices.GetStudentByAge(age);
-            return Ok(students);
-        }
-
         [HttpPost]
         public async Task<IActionResult> AddStudent(Student student)
         {
