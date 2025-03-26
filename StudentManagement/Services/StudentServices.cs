@@ -1,4 +1,5 @@
 ﻿using StudentManagement.Model;
+using System.Data;
 using System.Data.SqlClient;
 
 namespace StudentManagement.Services
@@ -9,6 +10,45 @@ namespace StudentManagement.Services
         public StudentServices(IConfiguration configuration)
         {
             _connnectionString = configuration.GetConnectionString("DefaultConnection");
+        }
+
+        private async Task<DataSet> GetStudentFromDatabase(string filterexpression = null)
+        {
+            DataSet dataSet = new DataSet();
+            using (SqlConnection connection = new SqlConnection(_connnectionString))
+            {
+                await connection.OpenAsync();
+                string selectCommandText = "SELECT * FROM Students";
+                if (!string.IsNullOrEmpty(filterexpression))
+                {
+                    selectCommandText += " WHERE " + filterexpression;
+                }
+                using (SqlDataAdapter dataAdapter = new SqlDataAdapter(selectCommandText, connection))
+                {
+                    dataAdapter.Fill(dataSet, "Students");
+                }
+            }
+            return dataSet;
+        }
+
+        public async Task<IEnumerable<Student>> GetStudentByAge(int age)
+        {
+            DataSet dataSet = await GetStudentFromDatabase($"Age = {age}");
+            List<Student> students = new List<Student>();
+            if (dataSet.Tables.Contains("Students"))
+            {
+                foreach (DataRow row in dataSet.Tables["Students"].Rows)
+                {
+                    students.Add(new Student
+                    {
+                        StudentID = Convert.ToInt32(row["StudentID"]),
+                        FirstName = row["FirstName"].ToString(),
+                        LastName = row["LastName"].ToString(),
+                        Age = Convert.ToInt32(row["Age"])
+                    });
+                }
+            }
+            return students;
         }
         public async Task AddStudent(Student student)
         {
@@ -27,66 +67,61 @@ namespace StudentManagement.Services
 
         public async Task DeleteStudent(int studentID)
         {
+            DataSet dataSet = await GetStudentFromDatabase($"StudentID = {studentID}");
+            if (dataSet.Tables.Contains("Students") && dataSet.Tables["Students"].Rows.Count > 0)
+            {
+                dataSet.Tables["Students"].Rows[0].Delete();
+                await UpdateDatabase(dataSet);
+            }
+        }
+
+        private async Task UpdateDatabase(DataSet dataSet)
+        {
             using (SqlConnection connection = new SqlConnection(_connnectionString))
             {
                 await connection.OpenAsync();
-                using (SqlCommand command = new SqlCommand("DELETE FROM Students WHERE StudentID = @StudentID", connection))
+                string selectCommandText = "SELECT * FROM Students";
+                using (SqlDataAdapter adapter = new SqlDataAdapter(selectCommandText, connection))
                 {
-                    command.Parameters.AddWithValue("@StudentID", studentID);
-                    await command.ExecuteNonQueryAsync();
+                    SqlCommandBuilder builder = new SqlCommandBuilder(adapter);
+                    adapter.Update(dataSet, "Students");
                 }
             }
         }
 
         public async Task<Student> GetStudent(int studentID)
         {
-            using (SqlConnection connection = new SqlConnection(_connnectionString))
+            DataSet dataSet = await GetStudentFromDatabase($"StudentID = {studentID}");
+            if(dataSet.Tables.Contains("Students") && dataSet.Tables["Students"].Rows.Count > 0)
             {
-                await connection.OpenAsync();
-                using(SqlCommand command = new SqlCommand("SELECT * FROM Students WHERE StudentID = @StudentID", connection))
+                DataRow row = dataSet.Tables["Students"].Rows[0];
+                return new Student
                 {
-                    command.Parameters.AddWithValue("@StudentID", studentID);
-                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
-                    {
-                        if (await reader.ReadAsync())
-                        {
-                            return new Student
-                            {
-                                StudentID = (int)reader["StudentID"],
-                                FirstName = reader["FirstName"] as string,
-                                LastName = reader["LastName"] as string,
-                                Age = reader["Age"] as int?
-                            };
-                        }
-                        return null;
-                    }
-                }
+                    StudentID = Convert.ToInt32(row["StudentID"]),
+                    FirstName = row["FirstName"].ToString(),
+                    LastName = row["LastName"].ToString(),
+                    Age = Convert.ToInt32(row["Age"])
+                };
             }
+            return null;
         }
 
         public async Task<IEnumerable<Student>> GetStudents()
         {
+
+            DataSet dataSet = await GetStudentFromDatabase();
             List<Student> students = new List<Student>();
-            using (SqlConnection connection = new SqlConnection(_connnectionString))
+            if (dataSet.Tables.Contains("Students"))
             {
-                await connection.OpenAsync();
-                using (SqlCommand command = new SqlCommand("SELECT * FROM Students", connection))
+                foreach (DataRow row in dataSet.Tables["Students"].Rows)
                 {
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    students.Add(new Student
                     {
-                        
-                        while ( await reader.ReadAsync())
-                        {
-                            students.Add(new Student
-                            {
-                                StudentID = (int)reader["StudentID"],
-                                FirstName = reader["FirstName"] as string,
-                                LastName = reader["LastName"] as string,
-                                Age = reader["Age"] as int?
-                            });
-                        }
-                        
-                    }
+                        StudentID = Convert.ToInt32(row["StudentID"]),
+                        FirstName = row["FirstName"].ToString(),
+                        LastName = row["LastName"].ToString(),
+                        Age = Convert.ToInt32(row["Age"])
+                    });
                 }
             }
             return students;
@@ -94,17 +129,14 @@ namespace StudentManagement.Services
 
         public async Task UpdateStudent(Student student)
         {
-            using(SqlConnection connection = new SqlConnection(_connnectionString))
+            DataSet dataSet = await GetStudentFromDatabase($"StudentID = {student.StudentID}");
+            if (dataSet.Tables.Contains("Students") && dataSet.Tables["Students"].Rows.Count > 0)
             {
-                await connection.OpenAsync();
-                using (SqlCommand command = new SqlCommand("UPDATE Students SET FirstName = @FirstName, LastName = @LastName, Age = @Age WHERE StudentID = @StudentID", connection))
-                {
-                    command.Parameters.AddWithValue("@FirstName", student.FirstName);
-                    command.Parameters.AddWithValue("@LastName", student.LastName);
-                    command.Parameters.AddWithValue("@Age", student.Age);
-                    command.Parameters.AddWithValue("@StudentID", student.StudentID);
-                    await command.ExecuteNonQueryAsync();
-                }
+                DataRow row = dataSet.Tables["Students"].Rows[0];
+                row["FirstName"] = student.FirstName;
+                row["LastName"] = student.LastName;
+                row["Age"] = student.Age;
+                await UpdateDatabase(dataSet);
             }
         }
 
